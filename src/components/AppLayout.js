@@ -1,19 +1,18 @@
 /**
- * AppLayout — wraps every screen with the global header and context-aware footer.
- *
- * Header:  aptunnel-gui  │  env: <name>  │  N/M tunnels up     aptunnel-gui v1.0.0
- * Content: flex-grow area
- * Footer:  context keybind hints
+ * AppLayout — global header + footer wrapper.
+ * Fills the full terminal width. Header never wraps — right side truncates.
+ * Mouse tracking is initialized here (root-level, once).
  */
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Box, Text, useStdout } from 'ink';
 import { useAppContext } from '../state/AppContext.js';
-import { Status, APP_VERSION, MIN_COLS } from '../constants.js';
+import { useMouse } from '../hooks/useMouse.js';
+import { Status, APP_VERSION } from '../constants.js';
 
 function countTunnels(envs, dbStates) {
   let total = 0, up = 0;
-  for (const env of envs) {
-    for (const db of env.dbs) {
+  for (const env of (envs ?? [])) {
+    for (const db of (env.dbs ?? [])) {
       total++;
       const key = `${env.envAlias}/${db.dbAlias}`;
       if (dbStates[key]?.tunnel === Status.CONNECTED) up++;
@@ -22,45 +21,56 @@ function countTunnels(envs, dbStates) {
   return { up, total };
 }
 
-function getActiveEnvName(envs, settings) {
-  const def = settings.defaultEnv;
-  if (def) {
-    const found = envs.find(e => e.envAlias === def);
-    if (found) return found.envAlias;
-  }
-  return envs[0]?.envAlias ?? '—';
-}
-
-export default function AppLayout({ children, footer }) {
+export default function AppLayout({ children, footer, mouseHandler }) {
   const { state } = useAppContext();
   const { stdout } = useStdout();
   const cols = stdout?.columns ?? 80;
+
   const { up, total } = countTunnels(state.envs, state.dbStates);
-  const envName = getActiveEnvName(state.envs, state.settings);
+  const envName = state.settings.defaultEnv
+    ?? state.envs?.[0]?.envAlias
+    ?? '—';
 
-  const headerLeft  = ` aptunnel-gui  │  env: ${envName}  │  ${up}/${total} tunnels up`;
-  const headerRight = `aptunnel-gui v${APP_VERSION} `;
-  const gap = Math.max(1, cols - headerLeft.length - headerRight.length);
+  const version = `aptunnel-gui v${APP_VERSION}`;
+  const headerLeft = ` aptunnel-gui  │  env: ${envName}  │  ${up}/${total} tunnels up`;
 
-  const defaultFooter = '[↑↓] navigate  [Enter] select  [Ctrl+C] quit';
+  // Right-align version, left side gets remaining space
+  const rightWidth = version.length + 1;
+  const leftMaxWidth = Math.max(0, cols - rightWidth - 2);
+  const leftText = headerLeft.length > leftMaxWidth
+    ? headerLeft.slice(0, leftMaxWidth - 1) + '…'
+    : headerLeft.padEnd(leftMaxWidth);
+
+  const divider = '─'.repeat(cols);
+
+  const footerText = footer ?? '[↑↓] navigate  [Enter] select  [Ctrl+C] quit';
+  const footerMax = cols - 2;
+  const footerDisplay = footerText.length > footerMax
+    ? footerText.slice(0, footerMax - 1) + '…'
+    : footerText;
+
+  // Mount mouse handler at root level so it's always active
+  const noop = useCallback(() => {}, []);
+  useMouse(mouseHandler ?? noop);
 
   return (
     <Box flexDirection="column" width={cols}>
-      {/* Header */}
-      <Box borderStyle="single" borderBottom={false} paddingX={1} width={cols}>
-        <Text bold>{headerLeft}</Text>
-        <Text>{' '.repeat(gap)}</Text>
-        <Text dimColor>{headerRight}</Text>
+      {/* ── Header ── */}
+      <Box width={cols} flexDirection="row">
+        <Text bold>{leftText}</Text>
+        <Text dimColor>{version} </Text>
       </Box>
+      <Text dimColor>{divider}</Text>
 
-      {/* Content */}
-      <Box flexGrow={1} flexDirection="column" paddingX={1}>
+      {/* ── Content ── */}
+      <Box flexDirection="column" flexGrow={1}>
         {children}
       </Box>
 
-      {/* Footer */}
-      <Box borderStyle="single" borderTop={false} paddingX={1} width={cols}>
-        <Text dimColor>{footer ?? defaultFooter}</Text>
+      {/* ── Footer ── */}
+      <Text dimColor>{divider}</Text>
+      <Box width={cols} paddingLeft={1}>
+        <Text dimColor>{footerDisplay}</Text>
       </Box>
     </Box>
   );
