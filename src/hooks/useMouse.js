@@ -6,9 +6,14 @@
  *
  * Also exposes a global click dispatcher and region registry for
  * components that want positional click handling.
+ *
+ * IMPORTANT: The raw stdin listener is attached at module load time,
+ * directly on process.stdin — NOT through Ink's useStdin. This is
+ * intentional: Ink wraps stdin with readline.emitKeypressEvents()
+ * which can interfere with raw escape-sequence parsing if we attach
+ * after Ink initializes.
  */
 import { useEffect } from 'react';
-import { useStdin } from 'ink';
 
 // ─── Global region registry ──────────────────────────────────────────────────
 
@@ -41,13 +46,18 @@ const SGR_RE = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
 // Legacy VT200: ESC [ M bxy  (3 bytes for button, col, row; all offset by 32)
 const VT200_RE = /\x1b\[M([\x20-\xff])([\x20-\xff])([\x20-\xff])/;
 
+// Carry-over buffer for escape sequences split across multiple chunks
+let _buf = '';
+
 function parseAndDispatch(chunk) {
-  const str = chunk.toString('binary');
+  // Append incoming data to carry-over buffer
+  const incoming = Buffer.isBuffer(chunk) ? chunk.toString('binary') : String(chunk);
+  _buf += incoming;
 
   // SGR (preferred — works for large terminals)
   SGR_RE.lastIndex = 0;
   let m;
-  while ((m = SGR_RE.exec(str)) !== null) {
+  while ((m = SGR_RE.exec(_buf)) !== null) {
     const btn = parseInt(m[1]);
     const x   = parseInt(m[2]);
     const y   = parseInt(m[3]);
@@ -57,13 +67,16 @@ function parseAndDispatch(chunk) {
   }
 
   // VT200 fallback
-  const vt = str.match(VT200_RE);
+  const vt = _buf.match(VT200_RE);
   if (vt) {
     const btn = vt[1].charCodeAt(0) - 32;
     const x   = vt[2].charCodeAt(0) - 32;
     const y   = vt[3].charCodeAt(0) - 32;
     dispatch({ x, y, button: btn & 3, type: 'mousedown' });
   }
+
+  // Keep only the last 256 bytes in the buffer (prevents unbounded growth)
+  if (_buf.length > 256) _buf = _buf.slice(-256);
 }
 
 function dispatch(event) {
@@ -101,31 +114,52 @@ function disableMouse() {
   process.stdout.write('\x1b[?1006l');
 }
 
+// ─── Raw stdin listener — attached at module load, before Ink initializes ────
+//
+// Ink calls readline.emitKeypressEvents(stdin) during its own setup.
+// If we attach AFTER that, readline may transform escape sequences before
+// our listener runs. Attaching here (synchronously at import time) ensures
+// we always see the raw bytes.
+
+let _stdinAttached = false;
+
+function attachStdinListener() {
+  if (_stdinAttached) return;
+  _stdinAttached = true;
+
+  const s = process.stdin;
+
+  // If stdin is already flowing (paused or readable), attach immediately.
+  // If it's not yet available (e.g. piped), wait for it to become readable.
+  if (s.readable) {
+    s.on('data', parseAndDispatch);
+  } else {
+    s.once('readable', () => s.on('data', parseAndDispatch));
+  }
+}
+
+attachStdinListener();
+
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 /**
  * useMouse(handler)
  * Calls handler on every mouse event: { x, y, button, type }
- * Must be called inside a component that has stdin access.
+ * Must be called inside a React/Ink component.
  */
 export function useMouse(handler) {
-  const { stdin } = useStdin();
-
   useEffect(() => {
     enableMouse();
-
-    const onData = (chunk) => parseAndDispatch(chunk);
-    stdin.on('data', onData);
     rawHandlers.add(handler);
 
     return () => {
-      stdin.off('data', onData);
       rawHandlers.delete(handler);
       if (rawHandlers.size === 0) disableMouse();
     };
-  }, [stdin, handler]);
+  }, [handler]);
 }
 
-// Clean up on process exit
+// ─── Cleanup on exit ─────────────────────────────────────────────────────────
+
 process.on('exit', disableMouse);
 process.on('SIGINT', () => { disableMouse(); process.exit(0); });

@@ -761,16 +761,17 @@ import { Box as Box3, Text as Text3, useStdout } from "ink";
 
 // src/hooks/useMouse.js
 import { useEffect as useEffect2 } from "react";
-import { useStdin } from "ink";
 var regions = [];
 var rawHandlers = /* @__PURE__ */ new Set();
 var SGR_RE = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
 var VT200_RE = /\x1b\[M([\x20-\xff])([\x20-\xff])([\x20-\xff])/;
+var _buf = "";
 function parseAndDispatch(chunk) {
-  const str = chunk.toString("binary");
+  const incoming = Buffer.isBuffer(chunk) ? chunk.toString("binary") : String(chunk);
+  _buf += incoming;
   SGR_RE.lastIndex = 0;
   let m;
-  while ((m = SGR_RE.exec(str)) !== null) {
+  while ((m = SGR_RE.exec(_buf)) !== null) {
     const btn = parseInt(m[1]);
     const x = parseInt(m[2]);
     const y = parseInt(m[3]);
@@ -778,13 +779,14 @@ function parseAndDispatch(chunk) {
     const event = { x, y, button: btn & 3, type: released ? "mouseup" : "mousedown" };
     dispatch(event);
   }
-  const vt = str.match(VT200_RE);
+  const vt = _buf.match(VT200_RE);
   if (vt) {
     const btn = vt[1].charCodeAt(0) - 32;
     const x = vt[2].charCodeAt(0) - 32;
     const y = vt[3].charCodeAt(0) - 32;
     dispatch({ x, y, button: btn & 3, type: "mousedown" });
   }
+  if (_buf.length > 256) _buf = _buf.slice(-256);
 }
 function dispatch(event) {
   for (const h of rawHandlers) h(event);
@@ -811,19 +813,27 @@ function disableMouse() {
   process.stdout.write("\x1B[?1000l");
   process.stdout.write("\x1B[?1006l");
 }
+var _stdinAttached = false;
+function attachStdinListener() {
+  if (_stdinAttached) return;
+  _stdinAttached = true;
+  const s = process.stdin;
+  if (s.readable) {
+    s.on("data", parseAndDispatch);
+  } else {
+    s.once("readable", () => s.on("data", parseAndDispatch));
+  }
+}
+attachStdinListener();
 function useMouse(handler) {
-  const { stdin } = useStdin();
   useEffect2(() => {
     enableMouse();
-    const onData = (chunk) => parseAndDispatch(chunk);
-    stdin.on("data", onData);
     rawHandlers.add(handler);
     return () => {
-      stdin.off("data", onData);
       rawHandlers.delete(handler);
       if (rawHandlers.size === 0) disableMouse();
     };
-  }, [stdin, handler]);
+  }, [handler]);
 }
 process.on("exit", disableMouse);
 process.on("SIGINT", () => {
