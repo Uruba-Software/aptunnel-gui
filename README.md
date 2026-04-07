@@ -28,8 +28,63 @@ aptunnel-gui          # launch the terminal GUI
 
 ## Requirements
 
-- **[Node.js](https://nodejs.org)** 18+
-- **[aptunnel](https://www.npmjs.com/package/aptunnel)** 1.1.0+ (auto-installed on first launch if missing or outdated)
+Before installing `aptunnel-gui`, make sure you have the following:
+
+### 1. Node.js 18+
+
+Download from [nodejs.org](https://nodejs.org) or use a version manager:
+
+```bash
+# macOS / Linux — via nvm
+nvm install 20
+nvm use 20
+
+# Windows — via nvm-windows
+# https://github.com/coreybutler/nvm-windows
+```
+
+Verify:
+
+```bash
+node --version   # should print v18.x or higher
+```
+
+### 2. Aptible CLI
+
+aptunnel-gui shells out to the [Aptible CLI](https://www.aptible.com/docs/cli) — it must be installed and available in your PATH.
+
+```bash
+# macOS
+brew install aptible/aptible/aptible
+
+# Linux / WSL
+curl -s https://toolbelt.aptible.com/install.sh | bash
+
+# Windows
+# Download the installer from https://www.aptible.com/docs/cli
+```
+
+Verify:
+
+```bash
+aptible version
+```
+
+### 3. aptunnel 1.1.0+
+
+aptunnel-gui manages your Aptible tunnels through [aptunnel](https://www.npmjs.com/package/aptunnel). If it's not installed or is outdated, aptunnel-gui will install/update it automatically on first launch.
+
+To install manually:
+
+```bash
+npm install -g aptunnel
+```
+
+Verify:
+
+```bash
+aptunnel --version
+```
 
 ---
 
@@ -39,21 +94,35 @@ aptunnel-gui          # launch the terminal GUI
 npm install -g aptunnel-gui
 ```
 
-Then run:
+Then launch:
 
 ```bash
 aptunnel-gui
 ```
 
-On first launch, the setup wizard checks your `aptunnel` installation and guides you through configuration.
+On first launch, the setup wizard guides you through connecting to your Aptible account and configuring your environments.
 
 ---
 
-## Screens
+## First launch — setup wizard
+
+The wizard runs automatically if no `~/.aptunnel/config.yaml` is found. It:
+
+1. Checks your `aptunnel` version (installs/updates if needed)
+2. Detects existing config (offers to skip setup if already configured)
+3. Authenticates with your Aptible account via `aptunnel login`
+4. Fetches your environments and databases
+5. Assigns aliases and port numbers
+6. Detects database types (PostgreSQL, MySQL, Redis, Elasticsearch)
+7. Installs the relevant database drivers
+
+---
+
+## Usage
 
 ### Dashboard
 
-The main screen. Environments are accordion rows — expand to see their databases.
+The main screen. Environments are collapsible rows. Each database shows its tunnel status, port, and last-seen time.
 
 ```
  aptunnel-gui  │  env: dev  │  2/4 tunnels up          aptunnel-gui v1.0.0
@@ -71,100 +140,27 @@ The main screen. Environments are accordion rows — expand to see their databas
  [↑↓] nav  [Enter] expand  [o] open  [c] close  [p] port  [h] hide  [Ctrl+C] quit
 ```
 
-- `●` dot: green = UP, red = DOWN, yellow = connecting
-- Long names scroll on focus — no column shift
-- `[→]` or Enter opens DB Detail
+Status dot colors: `●` green = UP, red = DOWN, yellow = connecting.
 
 ### DB Detail
 
-Full-page view for a single database. Schema browser with independently collapsible sections.
+Opens with `Enter` or `→` on a database row. Shows tunnel controls, togglable credentials, and a schema browser (tables, views, indexes, triggers, functions).
 
-```
-[← dev-redis]  DEV › dev-db (postgresql)  [dev-elastic →]  [↩ List]
-──────────────────────────────────────────────────────────────────────
-Status: ● UP   Port: 55554   [↑ Open] [↓ Close] [⚙ Port / p] [hide ↯] [⟳]
-Credentials: ●●●●●●●●  [👁 t] Show / Hide
+### Port editor
 
-[▼] Schemas (2)                    loaded: 14:32  [⟳]
-  [▼] public  (12 tables, 45 MB)                  [⟳]
-        [▼] Tables (12)            loaded: 14:32  [⟳]
-              users              rows: 84,201    size: 12.4 MB
-              orders             rows: 312,440   size: 28.1 MB
-        [▶] Views (3)
-        [▶] Indexes (28)
-        [▶] Triggers (2)
-        [▶] Functions (5)
-  [▶] analytics  (4 tables, 12 MB)
-```
-
-### Init Wizard
-
-7-step guided setup. Runs `aptunnel init` internally — no Aptible API logic reimplemented.
-
-```
-✔  1. aptunnel check        v1.2.0 found
-✔  2. config check          ~/.aptunnel/config.yaml not found
-▶  3. aptible login         authenticating...
-○  4. fetch envs + DBs
-○  5. assign aliases & ports
-○  6. detect DB types
-○  7. install drivers
-
-████████████░░░░░░░░  2/7
-```
-
-### Port Editor
-
-3-step modal to change a tunnel's port and reconnect.
-
-```
-  Edit tunnel port
-  DB: dev-db
-
-  ✔ Step 1 — port 5433 is available
-  ▶ Step 2 — confirm reconnect
-  ⚠ Tunnel will be closed and reopened on new port.
-  Reconnect dev-db on port 5433?
-  [Y] Yes, reconnect  [N] Cancel
-```
-
-### Settings
-
-```
-Polling interval:     [5s ▾]
-Auto-open tunnel:     [Ask ▾]     Ask / Always / Never
-Background preload:   [ON ✓]
-Log retention:        [30d ▾]
-Theme:                [Dark ▾]
-Name truncate at:     [18ch ▾]
-
-─── Version info ──────────────────────────────────────
-aptunnel-gui version:   1.0.0
-aptunnel version:       1.2.0    [Check for update]
-min aptunnel required:  1.1.0
-
-─── Manage visibility ─────────────────────────────────
-[Manage hidden envs & DBs →]
-
-─── Danger zone ───────────────────────────────────────
-[✕ Clear all cache]    [Redo init wizard]
-```
+Press `p` on any database to open the 3-step port change modal: enter new port → confirm reconnect → optionally save as default.
 
 ### Logs
 
-```
-Filter: env [all ▾]  level [all ▾]  date [today ▾]
-──────────────────────────────────────────────────────
-14:33:12  WARN   dev / dev-elastic    conn attempt 3/5
-14:33:08  INFO   dev / dev-elastic    tunnel opening
-14:32:55  INFO   dev / dev-db         schema loaded (public.Tables)
-14:32:30  INFO   dev / dev-redis      tunnel up :55555
-14:30:10  INFO   app                  startup, polling every 5s
-```
+Press `l` from the dashboard. Scrollable log of all tunnel events, schema loads, errors, and background activity. Filterable by environment, level, and date. Exportable to file.
+
+### Settings
+
+Press `s` from the dashboard. Configure polling interval, auto-open behavior, background preload, log retention, name truncation, and more.
 
 ---
 
-## Keyboard Reference
+## Keyboard reference
 
 ### Dashboard
 
@@ -220,9 +216,11 @@ Filter: env [all ▾]  level [all ▾]  date [today ▾]
 
 ## Storage
 
+aptunnel-gui stores its data in `~/.aptunnel-gui/`:
+
 ```
 ~/.aptunnel-gui/
-  settings.json          — user preferences
+  settings.json          — preferences
   cache/
     <env-alias>/
       <db-alias>.json    — cached schema data per database
@@ -230,26 +228,24 @@ Filter: env [all ▾]  level [all ▾]  date [today ▾]
     YYYY-MM-DD.log       — daily log files (auto-rotated)
 ```
 
-aptunnel's own config stays at `~/.aptunnel/config.yaml` — aptunnel-gui never modifies it directly except through the Config Editor screen.
+aptunnel's own config stays at `~/.aptunnel/config.yaml` — aptunnel-gui reads it but only modifies it through the built-in Config Editor screen.
 
 ---
 
-## Platform Support
+## Platform support
 
 | Platform | Status | Notes |
 |---|---|---|
 | **Linux** | ✅ Full | Tested on Ubuntu 22.04+ |
 | **macOS** | ✅ Full | Tested on macOS 13+ |
-| **Windows** | ✅ Full | Tested on Windows 11 / PowerShell 7 |
+| **Windows** | ✅ Full | PowerShell 7, Windows Terminal recommended |
 | **WSL** | ✅ Full | Treated as Linux |
-
-CI runs 3 OS × 3 Node versions (18, 20, 22) on every push.
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for local dev setup, project layout, and the release process.
+See [CONTRIBUTING.md](https://github.com/Uruba-Software/aptunnel-gui/blob/main/CONTRIBUTING.md) for how to clone, set up, and run the project locally.
 
 ---
 
@@ -264,4 +260,4 @@ If this tool saves you time, consider supporting development:
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/Uruba-Software/aptunnel-gui/blob/main/LICENSE).

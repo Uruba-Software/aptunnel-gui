@@ -1,27 +1,87 @@
 # Contributing to aptunnel-gui
 
+## Prerequisites
+
+You'll need these installed before setting up the project:
+
+- **[Node.js](https://nodejs.org)** 18+ — use [nvm](https://github.com/nvm-sh/nvm) (Linux/macOS) or [nvm-windows](https://github.com/coreybutler/nvm-windows) (Windows) to manage versions
+- **[aptunnel](https://www.npmjs.com/package/aptunnel)** — `npm install -g aptunnel`
+- **[Aptible CLI](https://www.aptible.com/docs/cli)** — required to run aptunnel-gui end-to-end during development
+- **Git**
+
+---
+
 ## Local dev setup
 
 ```bash
 git clone https://github.com/Uruba-Software/aptunnel-gui.git
 cd aptunnel-gui
 npm install
-npm run dev       # tsup --watch (rebuilds to dist/ on change)
+npm run dev       # tsup --watch — rebuilds dist/ on every source change
 ```
 
 In a second terminal:
 
 ```bash
-npm start         # runs dist/index.js
+npm start         # node dist/index.js
 ```
 
-Run tests:
+---
+
+## OS-specific notes
+
+### macOS / Linux
+
+No special setup needed. `npm run dev` and `npm start` work out of the box.
+
+To make the dev build available as a global `aptunnel-gui` command while working on it:
 
 ```bash
-npm test          # unit tests (no live aptunnel required)
+npm link
+```
+
+This symlinks `dist/index.js` to your global bin. Run `npm run build` once first so `dist/index.js` exists.
+
+### Windows
+
+Use **PowerShell 7** (not cmd or PowerShell 5). [Windows Terminal](https://aka.ms/terminal) is recommended for the best Ink rendering.
+
+```powershell
+# Install PowerShell 7 if not already installed
+winget install Microsoft.PowerShell
+```
+
+All `npm` scripts work on Windows as-is. If you run into permission errors with `npm link`, open PowerShell as Administrator.
+
+**Note:** Ink requires a real TTY. Running `npm start` inside VS Code's embedded terminal or certain CI runners without a proper TTY will show a "Raw mode is not supported" error — this is expected in those contexts. Use Windows Terminal or a full terminal emulator.
+
+### WSL
+
+Treated as Linux. Use the Linux setup above. If you're connecting to Aptible from WSL, make sure the [Aptible CLI](https://www.aptible.com/docs/cli) is installed inside WSL, not just on the Windows host.
+
+---
+
+## Run tests
+
+```bash
+npm test          # unit tests — no live aptunnel or Aptible account required
 npm run lint      # ESLint
 npm run build     # production build to dist/
 ```
+
+Tests use Jest with Node.js ESM mode. All test suites run in under 2 seconds on a cold machine.
+
+**What's covered:**
+- All reducer actions and state transitions (`appReducer.test.js`)
+- Tunnel output and status output parsing (`aptunnel.test.js`)
+- Config YAML → app state mapping (`storage.test.js`)
+- Constants integrity — Status labels, Screen names, DB types, defaults (`constants.test.js`)
+- semver version comparison helpers (`versionCheck.test.js`)
+
+**What requires a live environment (not automated):**
+- `aptunnel init` / `aptunnel login` subprocess flows
+- DB-specific schema queries (pg, mysql2, ioredis, @elastic/elasticsearch)
+- Full screen rendering
 
 ---
 
@@ -44,47 +104,34 @@ src/
   hooks/
     usePolling.js           Polls aptunnel status on configurable interval; updates only changed state
     useNavigation.js        push/pop/replace/quit helpers for the screen stack
-    useTerminalSize.js      Terminal resize listener (stdout resize event)
+    useTerminalSize.js      Terminal resize listener
   components/
     AppLayout.js            Header + footer wrapper present on every screen
     StatusBadge.js          Colored inverse pill (UP/DOWN/CONN) and status dot (●)
     MarqueeText.js          Fixed-width text cell that scrolls on focus — no layout shift
     ProgressBar.js          Text-based progress bar (████░░░░ 3/7)
-    PortEditor.js           3-step port change modal (check → reconnect → persist)
+    PortEditor.js           3-step port change modal
   screens/
     Dashboard.js            Env/DB accordion, column layout, hide/show, keyboard nav
-    InitWizard.js           7-step setup wizard — calls aptunnel init/login via subprocess
-    DbDetail.js             Per-DB schema browser, credentials toggle, per-section refresh
-    Settings.js             App preferences, version info, hidden items, danger zone
-    Logs.js                 Scrollable log viewer with level/env/date filters and export
+    InitWizard.js           7-step setup wizard
+    DbDetail.js             Per-DB schema browser, credentials toggle
+    Settings.js             App preferences
+    Logs.js                 Scrollable log viewer
     ConfigEditor.js         Visual editor for ~/.aptunnel/config.yaml
 __tests__/
-  appReducer.test.js        All reducer actions and state transitions
-  aptunnel.test.js          parseTunnelOutput, parseStatusOutput
-  constants.test.js         Status labels, Screen names, regex, defaults integrity
-  storage.test.js           parseEnvsFromConfig (config YAML → app state)
-  versionCheck.test.js      semver version comparison helpers
+  appReducer.test.js
+  aptunnel.test.js
+  constants.test.js
+  storage.test.js
+  versionCheck.test.js
 ```
-
----
-
-## Key technical decisions
-
-- **ESM only** — `"type": "module"` throughout. No `require()`. `execa` v9 is ESM-only.
-- **tsup with `loader: { '.js': 'jsx' }`** — `.js` files contain JSX; esbuild needs the explicit loader override because the files don't use the `.jsx` extension.
-- **`exitOnCtrlC: false` in `render()`** — Ink's default Ctrl+C exit is bypassed so the global `useInput` handler can log the exit event and clean up subprocesses before quitting.
-- **`node_modules/jest/bin/jest.js` in test script** — `node_modules/.bin/jest` is a bash shebang script and fails on Windows PowerShell; using the `.js` path directly is cross-platform.
-- **Atomic cache writes** — all cache files are written to `<path>.tmp` then renamed, preventing partial reads if the process is killed mid-write.
-- **DB key format** — all per-DB state is keyed as `"envAlias/dbAlias"` (e.g. `"dev/dev-db"`), not by Aptible handle. Env resolution matches `environments[key].alias`, not the top-level YAML key.
-- **Only changed state dispatched on poll** — `usePolling` compares previous tunnel states before dispatching; unchanged DBs never trigger a re-render.
-- **`Set` for expandedEnvs in reducer** — uses a `Set<string>` for O(1) lookup. The reducer creates a new `Set` on every toggle (immutable pattern for React reconciliation).
 
 ---
 
 ## Making changes
 
 1. Fork the repo and create a feature branch.
-2. Make your changes. Add or update tests under `__tests__/`.
+2. Make your changes. Add or update tests in `__tests__/` for any new logic.
 3. Run `npm run build && npm test && npm run lint` — all must pass.
 4. Open a pull request against `main`.
 
@@ -97,6 +144,7 @@ CI runs on every PR: 3 OS (Linux, macOS, Windows) × 3 Node versions (18, 20, 22
 See [CLAUDE.md](CLAUDE.md) for the full release checklist.
 
 Short version:
+
 1. Bump version in `package.json`.
 2. Commit and push to `main`.
 3. `git tag v<version> && git push origin v<version>`
