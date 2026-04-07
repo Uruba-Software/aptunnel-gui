@@ -1,0 +1,86 @@
+{
+  "name": "aptunnel-gui",
+  "version": "0.1.0",
+  "description": "Terminal GUI for aptunnel — visual frontend for Aptible database tunnel management",
+  "type": "module",
+  "bin": {
+    "aptunnel-gui": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "prepublishOnly": "npm run build",
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "dependencies": {
+    "execa": "^9.0.0",
+    "ink": "^5.0.1",
+    "ink-text-input": "^6.0.0",
+    "react": "^18.3.1",
+    "semver": "^7.6.0",
+    "yaml": "^2.4.1"
+  },
+  "peerDependencies": {
+    "@elastic/elasticsearch": ">=8.0.0",
+    "ioredis": ">=5.0.0",
+    "mysql2": ">=3.0.0",
+    "pg": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    },
+    "@elastic/elasticsearch": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "tsup": "^8.0.0",
+    "typescript": "^6.0.2"
+  },
+  "jest": {
+    "extensionsToTreatAsEsm": [],
+    "transform": {},
+    "testEnvironment": "node",
+    "testMatch": ["**/__tests__/**/*.test.js"],
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    }
+  },
+  "keywords": [
+    "aptunnel",
+    "aptible",
+    "tunnel",
+    "gui",
+    "tui",
+    "cli",
+    "ink",
+    "database"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Uruba-Software/aptunnel-gui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Uruba-Software/aptunnel-gui/issues"
+  },
+  "homepage": "https://github.com/Uruba-Software/aptunnel-gui#readme"
+}

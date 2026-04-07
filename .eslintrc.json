@@ -1,0 +1,21 @@
+{
+  "env": {
+    "node": true,
+    "es2022": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module",
+    "ecmaFeatures": { "jsx": true }
+  },
+  "plugins": [],
+  "rules": {
+    "no-unused-vars": ["warn", {
+      "vars": "all",
+      "varsIgnorePattern": "^React$",
+      "args": "none",
+      "ignoreRestSiblings": true
+    }],
+    "no-console": "off"
+  }
+}
