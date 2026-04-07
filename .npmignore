@@ -1,0 +1,8 @@
+__tests__/
+.claude/
+.eslintrc.json
+.github/
+CLAUDE.md
+design/
+src/
+tsup.config.js
