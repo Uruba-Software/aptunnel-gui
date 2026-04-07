@@ -1,167 +1,105 @@
 # Contributing to aptunnel-gui
 
-Thank you for your interest in contributing! Here's everything you need to get started.
-
----
-
-## Project overview
-
-`aptunnel-gui` is a terminal GUI built with [Ink](https://github.com/vadimdemedes/ink) (React for CLI). It wraps the `aptunnel` CLI and never re-implements Aptible logic directly — all tunnel operations shell out to `aptunnel`.
-
-Key constraint: **the UI must never block**. Every operation is async.
-
----
-
-## Development setup
-
-### Requirements
-
-- Node.js ≥ 18
-- npm ≥ 9
-- `aptunnel` installed globally (`npm i -g aptunnel`)
-
-### Clone and install
+## Local dev setup
 
 ```bash
 git clone https://github.com/Uruba-Software/aptunnel-gui.git
 cd aptunnel-gui
 npm install
+npm run dev       # tsup --watch (rebuilds to dist/ on change)
 ```
 
-### Run in dev mode (watch + rebuild)
+In a second terminal:
 
 ```bash
-npm run dev
+npm start         # runs dist/index.js
 ```
 
-This runs `tsup --watch`. In a second terminal:
+Run tests:
 
 ```bash
-npm start   # runs dist/index.js
+npm test          # unit tests (no live aptunnel required)
+npm run lint      # ESLint
+npm run build     # production build to dist/
 ```
-
-### Build
-
-```bash
-npm run build
-```
-
-Output goes to `dist/index.js` (bundled ESM, ~90 KB).
 
 ---
 
-## Project structure
+## Project layout
 
 ```
 src/
-  index.js              — entry point
-  App.js                — root component, screen router, startup logic
-  constants.js          — Status, Screen, DbType, defaults
+  index.js                  Entry point — render(<App />, { exitOnCtrlC: false })
+  App.js                    Root component — startup flow, screen router, global Ctrl+C
+  constants.js              Status labels, Screen names, DbType, DEFAULT_SETTINGS, regex
   state/
-    AppContext.js        — React context
-    appReducer.js        — full app reducer
+    AppContext.js            React context + useAppContext hook
+    appReducer.js           Full app reducer (navigation, tunnel status, hide/show, port editor, logs)
   services/
-    aptunnel.js         — all aptunnel CLI calls via execa
-    storage.js          — ~/.aptunnel-gui/ reads/writes (atomic)
-    logger.js           — writes to disk + in-memory state
-    versionCheck.js     — startup aptunnel version check
-    backgroundPreload.js — sequential low-priority schema loader
+    aptunnel.js             All aptunnel CLI calls via execa — never re-implements Aptible logic
+    storage.js              ~/.aptunnel-gui/ reads/writes (atomic: write to .tmp, rename)
+    logger.js               Writes log entries to disk + in-memory state simultaneously
+    versionCheck.js         Startup aptunnel version check using semver
+    backgroundPreload.js    Sequential low-priority schema loader (cancellable)
   hooks/
-    usePolling.js       — polls aptunnel status on interval
-    useNavigation.js    — push/pop/replace screen stack
-    useTerminalSize.js  — terminal resize listener
+    usePolling.js           Polls aptunnel status on configurable interval; updates only changed state
+    useNavigation.js        push/pop/replace/quit helpers for the screen stack
+    useTerminalSize.js      Terminal resize listener (stdout resize event)
   components/
-    AppLayout.js        — header + footer wrapper
-    StatusBadge.js      — colored status pill and dot
-    MarqueeText.js      — fixed-width scrolling text
-    ProgressBar.js      — text-based progress bar
-    PortEditor.js       — 3-step port change modal
+    AppLayout.js            Header + footer wrapper present on every screen
+    StatusBadge.js          Colored inverse pill (UP/DOWN/CONN) and status dot (●)
+    MarqueeText.js          Fixed-width text cell that scrolls on focus — no layout shift
+    ProgressBar.js          Text-based progress bar (████░░░░ 3/7)
+    PortEditor.js           3-step port change modal (check → reconnect → persist)
   screens/
-    Dashboard.js        — main env/DB accordion list
-    InitWizard.js       — 7-step setup wizard
-    DbDetail.js         — per-DB schema browser
-    Settings.js         — app preferences
-    Logs.js             — scrollable log viewer
-    ConfigEditor.js     — aptunnel config.yaml editor
+    Dashboard.js            Env/DB accordion, column layout, hide/show, keyboard nav
+    InitWizard.js           7-step setup wizard — calls aptunnel init/login via subprocess
+    DbDetail.js             Per-DB schema browser, credentials toggle, per-section refresh
+    Settings.js             App preferences, version info, hidden items, danger zone
+    Logs.js                 Scrollable log viewer with level/env/date filters and export
+    ConfigEditor.js         Visual editor for ~/.aptunnel/config.yaml
 __tests__/
-  appReducer.test.js
-  aptunnel.test.js
-  constants.test.js
-  storage.test.js
-  versionCheck.test.js
+  appReducer.test.js        All reducer actions and state transitions
+  aptunnel.test.js          parseTunnelOutput, parseStatusOutput
+  constants.test.js         Status labels, Screen names, regex, defaults integrity
+  storage.test.js           parseEnvsFromConfig (config YAML → app state)
+  versionCheck.test.js      semver version comparison helpers
 ```
 
 ---
 
-## Running tests
+## Key technical decisions
 
-```bash
-npm test
-```
-
-Tests use Jest with Node.js ESM mode (`--experimental-vm-modules`). All 5 test suites run without a live `aptunnel` instance.
-
-### What's tested
-
-- All reducer actions and state transitions
-- `parseTunnelOutput()` — parsing tunnel open stdout
-- `parseStatusOutput()` — parsing status output
-- `parseEnvsFromConfig()` — mapping config YAML to app state
-- Constants integrity (Status labels, Screen names, DB types, defaults)
-- semver version comparisons
-
-### What's not tested (yet / needs live aptunnel)
-
-- DB-specific schema queries (pg, mysql2, ioredis, @elastic/elasticsearch)
-- `aptunnel init` / `aptunnel login` subprocess flows
-- Full screen rendering (Ink component integration tests)
+- **ESM only** — `"type": "module"` throughout. No `require()`. `execa` v9 is ESM-only.
+- **tsup with `loader: { '.js': 'jsx' }`** — `.js` files contain JSX; esbuild needs the explicit loader override because the files don't use the `.jsx` extension.
+- **`exitOnCtrlC: false` in `render()`** — Ink's default Ctrl+C exit is bypassed so the global `useInput` handler can log the exit event and clean up subprocesses before quitting.
+- **`node_modules/jest/bin/jest.js` in test script** — `node_modules/.bin/jest` is a bash shebang script and fails on Windows PowerShell; using the `.js` path directly is cross-platform.
+- **Atomic cache writes** — all cache files are written to `<path>.tmp` then renamed, preventing partial reads if the process is killed mid-write.
+- **DB key format** — all per-DB state is keyed as `"envAlias/dbAlias"` (e.g. `"dev/dev-db"`), not by Aptible handle. Env resolution matches `environments[key].alias`, not the top-level YAML key.
+- **Only changed state dispatched on poll** — `usePolling` compares previous tunnel states before dispatching; unchanged DBs never trigger a re-render.
+- **`Set` for expandedEnvs in reducer** — uses a `Set<string>` for O(1) lookup. The reducer creates a new `Set` on every toggle (immutable pattern for React reconciliation).
 
 ---
 
-## Code style
+## Making changes
 
-- **ESM only** — no `require()`, no CommonJS
-- **Async-first** — never block the UI thread
-- **No hardcoded names** — all env/DB names come from config
-- **No credential leaks** — passwords and URLs never shown without explicit user toggle
-- **Lint:** `npm run lint` (ESLint, warnings allowed, errors are not)
+1. Fork the repo and create a feature branch.
+2. Make your changes. Add or update tests under `__tests__/`.
+3. Run `npm run build && npm test && npm run lint` — all must pass.
+4. Open a pull request against `main`.
 
----
-
-## Adding a new screen
-
-1. Create `src/screens/YourScreen.js` — export a default React component
-2. Add the screen name to `Screen` in `src/constants.js`
-3. Import and add it to `SCREEN_MAP` in `src/App.js`
-4. Use `useNavigation().push(Screen.YOUR_SCREEN, params)` to navigate to it
-5. Wrap content in `<AppLayout footer="...">` for consistent header/footer
+CI runs on every PR: 3 OS (Linux, macOS, Windows) × 3 Node versions (18, 20, 22) = 9 combinations.
 
 ---
 
-## Adding a new reducer action
+## Release process (maintainers)
 
-1. Add a `case 'ACTION_NAME':` to `appReducer.js`
-2. Add a test in `__tests__/appReducer.test.js`
-3. Dispatch it with `dispatch({ type: 'ACTION_NAME', ...payload })`
+See [CLAUDE.md](CLAUDE.md) for the full release checklist.
 
----
+Short version:
+1. Bump version in `package.json`.
+2. Commit and push to `main`.
+3. `git tag v<version> && git push origin v<version>`
+4. `gh release create v<version> --title "v<version>" --generate-notes`
 
-## Pull request guidelines
-
-- Keep PRs focused — one logical change per PR
-- Tests required for new logic (especially reducer actions and service functions)
-- Run `npm run build && npm test && npm run lint` before opening a PR
-- Describe what changed and why in the PR description
-- Design changes should include screenshots or ASCII mockups
-
----
-
-## Reporting issues
-
-Open an issue at [github.com/Uruba-Software/aptunnel-gui/issues](https://github.com/Uruba-Software/aptunnel-gui/issues).
-
-Please include:
-- Your OS and Node.js version
-- `aptunnel --version` output
-- Steps to reproduce
-- What you expected vs. what happened
+CI publishes to npm automatically when a `v*` tag is pushed and all cross-platform tests pass.
