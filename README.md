@@ -28,6 +28,9 @@ aptunnel-gui          # launch the terminal GUI
 
 ## Requirements
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
+
 Before installing `aptunnel-gui`, make sure you have the following:
 
 ### 1. Node.js 18+
