@@ -58,7 +58,9 @@
     "extensionsToTreatAsEsm": [],
     "transform": {},
     "testEnvironment": "node",
-    "testMatch": ["**/__tests__/**/*.test.js"],
+    "testMatch": [
+      "**/__tests__/**/*.test.js"
+    ],
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1"
     }
@@ -74,7 +76,7 @@
     "database"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/Uruba-Software/aptunnel-gui.git"
